@@ -1,0 +1,8 @@
+{
+    "consumer_key": "hello world",
+    "consumer_secret": "foobar",
+    "cache": 1000,
+    "search": {
+        "q": "#custserv min_retweets:1"
+    }
+}
