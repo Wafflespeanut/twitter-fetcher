@@ -43,7 +43,7 @@ class TweetFetcher(object):
 
     def get_last(self, count):
         ''' Get latest tweets from the local DB'''
-        assert os.path.exists(self._db), "cache is not populated"
+        assert os.path.exists(self._db), "cache does not exist"
         with open(self._db, 'r') as fd:
             lines = fd.readlines()      # FIXME: out of range error-prone
             assert len(lines) >= count, "cache has only %s tweets" % len(lines)

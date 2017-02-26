@@ -1,4 +1,4 @@
-## tweet-fetcher
+## twitter-fetcher
 
 A simple wrapper over the [Twitter API](https://github.com/geduldig/TwitterAPI) to cache and serve tweets corresponding to a specified query.
 
@@ -31,11 +31,12 @@ f.kill_worker()
 To get 10 latest tweets from the local DB, run
 
 ``` python
-print f.get_last(10)
+tweets = f.get_last(10)
+print map(lambda tweet: tweet['text'], tweets)
 ```
 
 ### Design:
 
-The goal of this wrapper is to serve the latest tweets (corresponding to the specified search query in the config) regardless of the API rate limitation imposed by Twitter. So, it makes use of a background worker which sends API requests every 2 seconds (utilizing the maximum allowed API request rate) and keeps the local database in sync with the latest tweets matching that query. This allows us to independently fetch any number of latest tweets (limited by the cache size) any time.
+The goal of this wrapper is to serve the latest tweets (corresponding to the specified search query in the config) regardless of the API rate limitation imposed by Twitter. So, it makes use of a background worker which sends API requests every two seconds and keeps the local database in sync with the latest tweets matching that query. This allows us to independently fetch any number of latest tweets (limited by the cache size) any time.
 
 The config is read only by the worker, and it reads it every time before populating the database. This means that whenever the config gets changed, it will be reflected in the database during the next iteration.
