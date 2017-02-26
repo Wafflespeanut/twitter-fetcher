@@ -3,6 +3,7 @@ import json
 
 from TwitterAPI import TwitterAPI, TwitterRestPager
 from datetime import datetime
+from threading import Thread
 from time import sleep
 
 # Number of tweets to be cached in the local DB
@@ -30,23 +31,29 @@ class TweetFetcher(object):
     >>> f.get_last(10)          # get the latest 10 tweets from cache
     '''
     cache = NUM_CACHE_TWEETS
+    kill_flag = False
 
-    def __init__(self, config_file='config.json', db='tweets_db'):
+    def __init__(self, config_file='config.json', db='tweets_db',
+                 log_enabled=False):
         self.config = config_file
         self.db = db
         self.tmp_db = 'tmp_' + db
+        self.log_enabled = log_enabled
 
     def load_config(self):
         '''JSON load the config file'''
         with open(self.config, 'r') as fd:
             return json.load(fd)
 
+    # FIXME: doesn't work well with threading (maybe log to file?)
     def log(self, msg):
         '''Log a message with timestamp'''
-        print '\033[91m%s\033[0m: \033[93m%s\033[0m' % (datetime.now(), msg)
+        if self.log_enabled:
+            print '\033[91m%s\033[0m: \033[93m%s\033[0m' % (datetime.now(), msg)
 
     def get_last(self, count):
         ''' Get latest tweets from the local DB'''
+        assert os.path.exists(self.db), "cache is not populated"
         with open(self.db, 'r') as fd:
             lines = fd.readlines()      # FIXME: out of range error-prone
             assert len(lines) >= count, "cache has only %s tweets" % len(lines)
@@ -73,12 +80,7 @@ class TweetFetcher(object):
         with open(self.tmp_db, 'a') as fd:
             fd.writelines(batch)
 
-    def run_worker(self):
-        '''
-        Infinitely keep the local DB updated with the latest N tweets
-        matching the given query (both cache size and query are specified
-        in the config)
-        '''
+    def _worker(self):
         if os.path.exists(self.tmp_db):     # clear any unfinished runs
             os.remove(self.tmp_db)
 
@@ -103,6 +105,22 @@ class TweetFetcher(object):
 
                 os.rename(self.tmp_db, self.db)     # atomic rename
                 self.log('Fetched %d tweets' % self.cache)
+                if self.kill_flag:
+                    self.log('Quitting worker...')
+                    break
+
                 sleep(WORKER_SLEEP_SECS)    # final sleep to maintain interval
             except KeyboardInterrupt:
                 break
+
+    def run_worker(self):
+        '''
+        Launch a thread to keep the local DB updated with the latest N tweets
+        matching the given query (both cache size and query are specified
+        in the config)
+        '''
+        thread = Thread(target=self._worker)
+        thread.start()
+
+    def kill_worker(self):
+        self.kill_flag = True
