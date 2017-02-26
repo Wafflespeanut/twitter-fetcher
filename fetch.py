@@ -19,15 +19,7 @@ WORKER_SLEEP_SECS = 2.1
 
 
 class TweetFetcher(object):
-    '''
-    An object to fetch and maintain a cache of tweets in a local DB.
-
-    Usage:
-    >>> from fetch import TweetFetcher
-    >>> f = TweetFetcher()      # defaults
-    >>> f.run_worker()          # to start the worker in the background
-    >>> f.get_last(10)          # get the latest 10 tweets from cache
-    '''
+    '''An object to fetch and maintain a cache of tweets in a local DB.'''
     cache = NUM_CACHE_TWEETS
     kill_flag = False
 
