@@ -25,9 +25,7 @@ class TweetFetcher(object):
     Usage:
     >>> from fetch import TweetFetcher
     >>> f = TweetFetcher()      # defaults
-    >>> f.run_worker()          # to start the infinite loop
-
-    (or)
+    >>> f.run_worker()          # to start the worker in the background
     >>> f.get_last(10)          # get the latest 10 tweets from cache
     '''
     cache = NUM_CACHE_TWEETS
@@ -35,35 +33,35 @@ class TweetFetcher(object):
 
     def __init__(self, config_file='config.json', db='tweets_db',
                  log_enabled=False):
-        self.config = config_file
-        self.db = db
-        self.tmp_db = 'tmp_' + db
-        self.log_enabled = log_enabled
+        self._config = config_file
+        self._db = db
+        self._tmp_db = 'tmp_' + db
+        self._log_enabled = log_enabled
 
-    def load_config(self):
+    def _load_config(self):
         '''JSON load the config file'''
-        with open(self.config, 'r') as fd:
+        with open(self._config, 'r') as fd:
             return json.load(fd)
 
     # FIXME: doesn't work well with threading (maybe log to file?)
-    def log(self, msg):
+    def _log(self, msg):
         '''Log a message with timestamp'''
-        if self.log_enabled:
+        if self._log_enabled:
             print '\033[91m%s\033[0m: \033[93m%s\033[0m' % (datetime.now(), msg)
 
     def get_last(self, count):
         ''' Get latest tweets from the local DB'''
-        assert os.path.exists(self.db), "cache is not populated"
-        with open(self.db, 'r') as fd:
+        assert os.path.exists(self._db), "cache is not populated"
+        with open(self._db, 'r') as fd:
             lines = fd.readlines()      # FIXME: out of range error-prone
             assert len(lines) >= count, "cache has only %s tweets" % len(lines)
             return map(json.loads, lines[:count])
 
-    def get_pager(self):
+    def _get_pager(self):
         '''Returns a paginating object over tweets'''
-        config = self.load_config()
+        config = self._load_config()
 
-        api = TwitterAPI(config['consumer_key'],
+        api = TwitterAPI(config['consumer_key'],        # app-only auth
                          config['consumer_secret'],
                          auth_type='oAuth2')
 
@@ -72,20 +70,23 @@ class TweetFetcher(object):
         assert query, 'expected a search query in config'
 
         params = {'q': query, 'count': TWEETS_PER_BATCH}
-        self.log('Query: %r' % params)
+        self._log('Query: %r' % params)
         return TwitterRestPager(api, SEARCH_ENDPOINT, params)
 
-    def dump_to_db(self, batch):
+    def _dump_to_db(self, batch):
         '''Dump a batch of tweets to DB'''
-        with open(self.tmp_db, 'a') as fd:
+        with open(self._tmp_db, 'a') as fd:
             fd.writelines(batch)
 
+    def _remove_tmp_db(self):
+        if os.path.exists(self._tmp_db):
+            os.remove(self._tmp_db)
+
     def _worker(self):
-        if os.path.exists(self.tmp_db):     # clear any unfinished runs
-            os.remove(self.tmp_db)
+        self._remove_tmp_db()        # clear any unfinished runs
 
         while True:
-            request = self.get_pager()
+            request = self._get_pager()
             # Make batch requests over specified intervals (so that we get
             # as many tweets we want without crossing our API request limits)
             paginating_iter = request.get_iterator(wait=WORKER_SLEEP_SECS)
@@ -94,20 +95,22 @@ class TweetFetcher(object):
                 curr_batch = []
                 for i, tweet_obj in enumerate(paginating_iter):
                     if i == self.cache:
-                        self.dump_to_db(curr_batch)     # final dump
+                        self._dump_to_db(curr_batch)     # final dump
                         break
 
+                    if self.kill_flag:      # check for kill status
+                        self._log('Quitting worker...')
+                        self._remove_tmp_db()
+                        return
+
                     if (i + 1) % TWEETS_PER_BATCH == 0:
-                        self.dump_to_db(curr_batch)     # dump once full
+                        self._dump_to_db(curr_batch)     # dump once full
                         curr_batch = []
 
                     curr_batch.append(json.dumps(tweet_obj) + '\n')
 
-                os.rename(self.tmp_db, self.db)     # atomic rename
-                self.log('Fetched %d tweets' % self.cache)
-                if self.kill_flag:
-                    self.log('Quitting worker...')
-                    break
+                os.rename(self._tmp_db, self._db)     # atomic rename
+                self._log('Fetched %d tweets' % self.cache)
 
                 sleep(WORKER_SLEEP_SECS)    # final sleep to maintain interval
             except KeyboardInterrupt:
@@ -123,4 +126,5 @@ class TweetFetcher(object):
         thread.start()
 
     def kill_worker(self):
+        '''Set the kill flag to quit the worker'''
         self.kill_flag = True
