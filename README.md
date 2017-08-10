@@ -1,4 +1,4 @@
-## twitter-fetcher
+# Twitter Fetcher
 
 A simple wrapper over the [Twitter API](https://github.com/geduldig/TwitterAPI) to cache and serve tweets corresponding to a specified query.
 
